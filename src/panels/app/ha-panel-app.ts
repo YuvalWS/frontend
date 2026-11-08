@@ -92,12 +92,18 @@ class HaPanelApp extends LitElement {
     super.connectedCallback();
     window.addEventListener("message", this._handleIframeMessage);
     window.addEventListener("resize", this._handleResize);
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", this._fitAboveKeyboard);
+    viewport?.addEventListener("scroll", this._fitAboveKeyboard);
   }
 
   public disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("message", this._handleIframeMessage);
     window.removeEventListener("resize", this._handleResize);
+    const viewport = window.visualViewport;
+    viewport?.removeEventListener("resize", this._fitAboveKeyboard);
+    viewport?.removeEventListener("scroll", this._fitAboveKeyboard);
 
     if (this._sessionKeepAlive) {
       clearInterval(this._sessionKeepAlive);
@@ -465,6 +471,20 @@ class HaPanelApp extends LitElement {
     }
   };
 
+  // On-screen keyboards cover the page instead of resizing it, which hides the
+  // bottom of the app under the keyboard. Shrink the iframe to end where the
+  // visible part of the page ends, so the app resizes like a normal window.
+  private _fitAboveKeyboard = () => {
+    const viewport = window.visualViewport!;
+    // Pinch zoom (still possible on iOS) also shrinks the visual viewport.
+    const covered =
+      viewport.scale > 1
+        ? 0
+        : this.getBoundingClientRect().bottom -
+          (viewport.offsetTop + viewport.height);
+    this.style.setProperty("--keyboard-inset", `${Math.max(0, covered)}px`);
+  };
+
   private _sendPropertiesToIframe() {
     if (!this._iframeRef.value?.contentWindow) {
       return;
@@ -504,7 +524,9 @@ class HaPanelApp extends LitElement {
   static styles = css`
     :host {
       display: block;
+      box-sizing: border-box;
       height: 100%;
+      padding-bottom: var(--keyboard-inset, 0px);
       position: relative;
     }
 
@@ -529,7 +551,7 @@ class HaPanelApp extends LitElement {
       transition: opacity var(--ha-animation-duration-normal) ease;
       padding: var(--safe-area-inset-top)
         var(--safe-area-content-inset-right, var(--safe-area-inset-right))
-        var(--safe-area-inset-bottom)
+        max(0px, var(--safe-area-inset-bottom) - var(--keyboard-inset, 0px))
         var(--safe-area-content-inset-left, var(--safe-area-inset-left));
     }
 
